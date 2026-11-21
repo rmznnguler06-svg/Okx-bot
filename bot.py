@@ -1,4 +1,3 @@
-
 import hmac
 import hashlib
 import base64
@@ -9,18 +8,18 @@ import json
 import os
 import ast
 
-# --- OKX API AYARLARI ---
-API_KEY = os.getenv("OKX_API_KEY", "1234567890000")
-API_SECRET = os.getenv("OKX_SECRET_KEY", "123456789000")
-PASSPHRASE = os.getenv("OKX_PASSPHRASE", "06Mekan18Vatan")
+# --- OKX API AYARLARI (GitHub Secrets üzerinden okunur) ---
+API_KEY = os.environ.get("OKX_API_KEY", "").strip()
+API_SECRET = os.environ.get("OKX_SECRET_KEY", "").strip()
+PASSPHRASE = os.environ.get("OKX_PASSPHRASE", "").strip()
 
 BASE_URL = "https://www.okx.com"
 
 # --- RİSK YÖNETİMİ VE KASA AYARLARI ---
-TOPLAM_KASA = 16.44         
-Riske_Atilacak_Oran = 0.01   
-STOP_CARPAN = 0.45           
-HEDEF_CARPAN = 0.40          
+TOPLAM_KASA = 16.44
+Riske_Atilacak_Oran = 0.01
+STOP_CARPAN = 0.45
+HEDEF_CARPAN = 0.40
 
 # Ham Strateji Listesi (Arada yapılabilecek küçük yazım/virgül hatalarını otomatik tolere eder)
 STRATEGY_RAW = """
@@ -60,20 +59,18 @@ STRATEGY_RAW = """
 try:
     STRATEGY_LIST = ast.literal_eval(STRATEGY_RAW.strip())
 except Exception as e:
-    print(f"⚠️ Strateji listesinde bir biçim hatası yakalandı, otomatik olarak onarılıyor...")
-    # Burada gerekirse otomatik temizleme kuralları çalıştırılabilir
-    # Şimdilik standart Python söz dizimi güvenliğe alınmıştır.
+    print("⚠️ Strateji listesinde bir biçim hatası yakalandı, otomatik olarak onarılıyor...")
     raise e
 
 def get_okx_sign(timestamp, method, request_path, body, secret_key):
     message = timestamp + method.upper() + request_path + body
-    mac = hmac.new(secret_key.encode('utf-8'), message.encode('utf-8'), hashlib.sha256)
-    return base64.b64encode(mac.digest()).decode('utf-8')
+    mac = hmac.new(secret_key.encode("utf-8"), message.encode("utf-8"), hashlib.sha256)
+    return base64.b64encode(mac.digest()).decode("utf-8")
 
 def place_order(symbol, side, size, stop_price, hedef_price):
     endpoint = "/api/v5/trade/order"
     url = BASE_URL + endpoint
-    
+
     payload = {
         "instId": symbol,
         "tdMode": "cross",
@@ -81,16 +78,16 @@ def place_order(symbol, side, size, stop_price, hedef_price):
         "ordType": "market",
         "sz": str(size),
         "posSide": "long" if side == "buy" else "short",
-        "tpTriggerPx": str(hedef_price),  
-        "tpOrdPx": "-1",                  
-        "slTriggerPx": str(stop_price),   
-        "slOrdPx": "-1"                   
+        "tpTriggerPx": str(hedef_price),
+        "tpOrdPx": "-1",
+        "slTriggerPx": str(stop_price),
+        "slOrdPx": "-1"
     }
-    
+
     body = json.dumps(payload)
-    timestamp = time.strftime('%Y-%m-%dT%H:%M:%S.320Z', time.gmtime())
+    timestamp = time.strftime("%Y-%m-%dT%H:%M:%S.320Z", time.gmtime())
     sign = get_okx_sign(timestamp, "POST", endpoint, body, API_SECRET)
-    
+
     headers = {
         "Content-Type": "application/json",
         "OK-ACCESS-KEY": API_KEY,
@@ -98,18 +95,18 @@ def place_order(symbol, side, size, stop_price, hedef_price):
         "OK-ACCESS-TIMESTAMP": timestamp,
         "OK-ACCESS-PASSPHRASE": PASSPHRASE
     }
-    
-    req = urllib.request.Request(url, data=body.encode('utf-8'), headers=headers, method="POST")
+
+    req = urllib.request.Request(url, data=body.encode("utf-8"), headers=headers, method="POST")
     try:
         with urllib.request.urlopen(req, timeout=10) as response:
-            res = json.loads(response.read().decode('utf-8'))
+            res = json.loads(response.read().decode("utf-8"))
             if res.get("code") == "0":
                 print(f"✅ Emir ve Otomatik SL/TP Başarıyla Gönderildi ({symbol} - {side.upper()}) | Boyut: {size}")
                 print(f"🎯 Hedef (TP): {hedef_price:.2f} | 🛑 Stop (SL): {stop_price:.2f}")
             else:
                 print(f"⚠️ OKX Hata Yanıtı ({symbol}): {res}")
     except urllib.error.HTTPError as e:
-        error_body = e.read().decode('utf-8')
+        error_body = e.read().decode("utf-8")
         print(f"❌ OKX Detaylı Red Yanıtı ({symbol}): {error_body}")
     except Exception as e:
         print(f"❌ Emir hatası ({symbol}): {e}")
@@ -120,7 +117,7 @@ def get_market_price(symbol):
     req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"}, method="GET")
     try:
         with urllib.request.urlopen(req, timeout=10) as response:
-            res = json.loads(response.read().decode('utf-8'))
+            res = json.loads(response.read().decode("utf-8"))
             if res.get("code") == "0" and len(res.get("data", [])) > 0:
                 return float(res["data"][0]["last"])
     except Exception as e:
@@ -129,42 +126,42 @@ def get_market_price(symbol):
 
 def run_trading_bot():
     print(f"🚀 OKX Scalping Botu Akıllı Tarama Başlatıldı (Kasa: {TOPLAM_KASA} USDT)...")
-    
+
     for item in STRATEGY_LIST:
         try:
             coin = item["coin"]
             price = get_market_price(coin)
-            
+
             if price:
                 aralik = item["ortalama_aralik"]
-                stop_yuzde = aralik * STOP_CARPAN 
-                hedef_yuzde = aralik * HEDEF_CARPAN 
-                
+                stop_yuzde = aralik * STOP_CARPAN
+                hedef_yuzde = aralik * HEDEF_CARPAN
+
                 izin_verilen_risk = TOPLAM_KASA * Riske_Atilacak_Oran
                 stop_oran_ondalik = stop_yuzde / 100
                 hedef_oran_ondalik = hedef_yuzde / 100
-                
+
                 pozisyon_boyutu_usdt = izin_verilen_risk / stop_oran_ondalik
                 islem_miktari_adet = pozisyon_boyutu_usdt / price
-                
+
                 print(f"\n{coin} Fiyat: {price} | Aralık: %{aralik}")
-                
+
                 destek = item["destek"]
                 direnc = item["direnc"]
-                oran = item["oran_050"] / 100.0  
-                
-                destek_retest_long = destek * (1 + oran)     
-                destek_kirilim_short = destek * (1 - oran)  
-                direnc_retest_short = direnc * (1 - oran)    
-                direnc_kirilim_long = direnc * (1 + oran)    
-                
+                oran = item["oran_050"] / 100.0
+
+                destek_retest_long = destek * (1 + oran)
+                destek_kirilim_short = destek * (1 - oran)
+                direnc_retest_short = direnc * (1 - oran)
+                direnc_kirilim_long = direnc * (1 + oran)
+
                 if price <= destek_retest_long and price >= destek:
-                    print(f"🚨 LONG ALARMI! (Destek bölgesi retest)")
+                    print("🚨 LONG ALARMI! (Destek bölgesi retest)")
                     stop_price = price * (1 - stop_oran_ondalik)
                     hedef_price = price * (1 + hedef_oran_ondalik)
                     place_order(coin, "buy", round(islem_miktari_adet, 4), stop_price, hedef_price)
                 elif price >= direnc_retest_short and price <= direnc:
-                    print(f"🚨 SHORT ALARMI! (Direnç bölgesi retest)")
+                    print("🚨 SHORT ALARMI! (Direnç bölgesi retest)")
                     stop_price = price * (1 + stop_oran_ondalik)
                     hedef_price = price * (1 - hedef_oran_ondalik)
                     place_order(coin, "sell", round(islem_miktari_adet, 4), stop_price, hedef_price)
@@ -177,5 +174,4 @@ def run_trading_bot():
 
 if __name__ == "__main__":
     run_trading_bot()
-
-
+    
